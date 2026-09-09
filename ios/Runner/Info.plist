@@ -47,6 +47,10 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Precisamos de acesso à câmera para você tirar fotos do seu progresso.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Precisamos de acesso à sua galeria para escolher fotos do seu progresso.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

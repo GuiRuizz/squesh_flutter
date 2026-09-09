@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/home/presentation/home_screen.dart';
 import '../features/ranking/presentation/ranking_screen.dart';
+import '../features/social/presentation/photos_screen.dart';
 import '../widgets/main_navigation_screen.dart';
 
 // Função auxiliar para criar a transição suave (Fade)
@@ -65,10 +66,7 @@ final GoRouter appRouter = GoRouter(
               path: '/photos',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const _PlaceholderScreen(
-                  title: 'COMPARTILHAR',
-                  icon: Icons.photo_camera,
-                ),
+                child: const PhotosScreen(), // <--- Atualizado aqui
               ),
             ),
           ],
