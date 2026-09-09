@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/home/presentation/home_screen.dart';
+import '../features/ranking/presentation/ranking_screen.dart';
 import '../widgets/main_navigation_screen.dart';
 
 // Função auxiliar para criar a transição suave (Fade)
@@ -51,10 +52,7 @@ final GoRouter appRouter = GoRouter(
               path: '/ranking',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const _PlaceholderScreen(
-                  title: 'RANKING',
-                  icon: Icons.leaderboard,
-                ),
+                child: const RankingScreen(), // <--- Atualizado aqui
               ),
             ),
           ],
