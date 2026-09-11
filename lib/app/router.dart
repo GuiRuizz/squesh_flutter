@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../features/home/presentation/home_screen.dart';
 import '../features/ranking/presentation/ranking_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
+import '../features/shop/presentation/shop_screen.dart';
 import '../features/social/presentation/photos_screen.dart';
 import '../widgets/main_navigation_screen.dart';
 
@@ -79,10 +81,7 @@ final GoRouter appRouter = GoRouter(
               path: '/shop',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const _PlaceholderScreen(
-                  title: 'LOJA',
-                  icon: Icons.shopping_bag,
-                ),
+                child: const ShopScreen(), // <--- Atualizado aqui
               ),
             ),
           ],
@@ -95,10 +94,7 @@ final GoRouter appRouter = GoRouter(
               path: '/settings',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const _PlaceholderScreen(
-                  title: 'CONFIGURAÇÕES',
-                  icon: Icons.settings,
-                ),
+                child: const SettingsScreen(), // <--- Atualizado aqui
               ),
             ),
           ],
