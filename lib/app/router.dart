@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:squesh_flutter/features/notification/presentation/notification_screen.dart';
 
 import '../features/home/presentation/home_screen.dart';
 import '../features/ranking/presentation/ranking_screen.dart';
@@ -30,6 +31,7 @@ CustomTransitionPage<void> _buildCustomPageTransition({
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
   routes: [
+    // Rotas das Abas Principais (com Bottom Navigation Shell)
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         return MainNavigationShell(navigationShell: navigationShell);
@@ -55,7 +57,7 @@ final GoRouter appRouter = GoRouter(
               path: '/ranking',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const RankingScreen(), // <--- Atualizado aqui
+                child: const RankingScreen(),
               ),
             ),
           ],
@@ -68,7 +70,7 @@ final GoRouter appRouter = GoRouter(
               path: '/photos',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const PhotosScreen(), // <--- Atualizado aqui
+                child: const PhotosScreen(),
               ),
             ),
           ],
@@ -81,7 +83,7 @@ final GoRouter appRouter = GoRouter(
               path: '/shop',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const ShopScreen(), // <--- Atualizado aqui
+                child: const ShopScreen(),
               ),
             ),
           ],
@@ -94,12 +96,20 @@ final GoRouter appRouter = GoRouter(
               path: '/settings',
               pageBuilder: (context, state) => _buildCustomPageTransition(
                 state: state,
-                child: const SettingsScreen(), // <--- Atualizado aqui
+                child: const SettingsScreen(),
               ),
             ),
           ],
         ),
       ],
+    ),
+
+    // Rota independente (Fullscreen Overlay, esconde a BottomNavBar)
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) {
+        return NotificationScreen();
+      },
     ),
   ],
 );

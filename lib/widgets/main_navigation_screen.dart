@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:squesh_flutter/features/notification/domain/notifications_controller.dart';
+
+// Controller da Bottom Navigation Bar
+import 'bottom_nav_notifications_controller.dart';
 
 class MainNavigationShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -9,7 +11,7 @@ class MainNavigationShell extends ConsumerWidget {
   const MainNavigationShell({super.key, required this.navigationShell});
 
   void _onTap(BuildContext context, WidgetRef ref, int index) {
-    // 1. Limpa a notificação da aba assim que o usuário clica nela
+    // 1. Limpa o badge/notificação da aba assim que o usuário clica nela
     ref.read(bottomNavNotificationsProvider.notifier).clearNotification(index);
 
     // 2. Navega para a aba correspondente no GoRouter
@@ -21,7 +23,7 @@ class MainNavigationShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Escuta o estado reativo das notificações
+    // Escuta o estado reativo das notificações das abas
     final notifications = ref.watch(bottomNavNotificationsProvider);
 
     return SafeArea(

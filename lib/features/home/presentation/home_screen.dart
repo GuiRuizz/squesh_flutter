@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:squesh_flutter/widgets/home_header_widget.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../widgets/diet_checklist_modal.dart';
 import '../../../widgets/path_connector_painter.dart';
@@ -16,72 +17,7 @@ class HomeScreen extends ConsumerWidget {
     final fitnessState = ref.watch(fitnessProvider);
 
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(70),
-        child: SafeArea(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: const BoxDecoration(
-              color: Color(0xFF141414), // Dark Glossy Header
-              border: Border(bottom: BorderSide(color: Color(0xFF222222))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'SQUESH',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                    color: AppTheme.crimsonRed,
-                  ),
-                ),
-                // Contador de Streak Diário
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: fitnessState.isTodayStreakAchieved
-                        ? AppTheme.crimsonRed.withValues(alpha: 0.2)
-                        : const Color(0xFF222222),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: fitnessState.isTodayStreakAchieved
-                          ? AppTheme.crimsonRed
-                          : const Color(0xFF333333),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.local_fire_department,
-                        color: fitnessState.isTodayStreakAchieved
-                            ? AppTheme.crimsonAccent
-                            : Colors.grey,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${fitnessState.streakCount} DIAS',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: fitnessState.isTodayStreakAchieved
-                              ? AppTheme.textMain
-                              : AppTheme.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      appBar: HomeHeaderWidget(fitnessState: fitnessState),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Row(
