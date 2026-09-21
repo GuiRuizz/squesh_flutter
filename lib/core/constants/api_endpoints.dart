@@ -1,6 +1,9 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 abstract class ApiEndpoints {
-  static const String baseUrl =
-      'http://sua-api.com/api/v1'; // Ou localhost / IP da máquina
+  // Lê a URL base do arquivo .env (com fallback para localhost)
+  static String get baseUrl =>
+      dotenv.env['API_URL'] ?? 'http://localhost:8080/api/v1';
 
   // Auth
   static const String login = '/auth/login';

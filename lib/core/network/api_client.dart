@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/api_endpoints.dart';
+import 'api_interceptor.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
@@ -12,22 +13,8 @@ final dioProvider = Provider<Dio>((ref) {
     ),
   );
 
-  dio.interceptors.add(
-    InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        // Exemplo: Buscar o token salvo localmente ou no estado do auth
-        // String? token = await SecureStorage.getToken();
-        // if (token != null) {
-        //   options.headers['Authorization'] = 'Bearer $token';
-        // }
-        return handler.next(options);
-      },
-      onError: (DioException error, handler) {
-        // Tratar erros globais (ex: 401 Unauthenticated)
-        return handler.next(error);
-      },
-    ),
-  );
+  // Adiciona o interceptor de log
+  dio.interceptors.add(LoggingInterceptor());
 
   return dio;
 });
