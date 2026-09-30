@@ -33,17 +33,17 @@ void main() async {
   runApp(const ProviderScope(child: SqueshApp()));
 }
 
-class SqueshApp extends StatelessWidget {
+class SqueshApp extends ConsumerWidget {
   const SqueshApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'Squesh',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      routerConfig:
-          appRouter, // <--- O GoRouter assume o controle das rotas aqui
+      routerConfig: router, // <--- O GoRouter assume o controle das rotas aqui
     );
   }
 }

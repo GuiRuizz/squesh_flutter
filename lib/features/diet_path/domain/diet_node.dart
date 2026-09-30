@@ -4,10 +4,15 @@ class MealItem {
   description; // Ex: "3 ovos mexidos + 1 xícara de aveia + café preto"
   final bool isConsumed;
 
+  /// Hora mínima para liberar a marcação (vem do backend: 6, 12, 15, 20).
+  /// Quando nulo, o modal usa a ordem padrão dos slots.
+  final int? requiredHour;
+
   const MealItem({
     required this.title,
     required this.description,
     this.isConsumed = false,
+    this.requiredHour,
   });
 
   MealItem copyWith({bool? isConsumed}) {
@@ -15,6 +20,7 @@ class MealItem {
       title: title,
       description: description,
       isConsumed: isConsumed ?? this.isConsumed,
+      requiredHour: requiredHour,
     );
   }
 }

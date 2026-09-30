@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:squesh_flutter/widgets/home_header_widget.dart';
@@ -5,101 +6,531 @@ import '../../../app/theme/app_theme.dart';
 import '../../../widgets/diet_checklist_modal.dart';
 import '../../../widgets/path_connector_painter.dart';
 import '../../../widgets/path_node_widget.dart';
+import '../../../widgets/workout_detail_modal.dart';
 import '../../diet_path/daily_progress_controller.dart';
 import '../../diet_path/domain/diet_node.dart';
-import '../../workout_path/domain/workout_node.dart';
+import '../domain/trail_entry.dart';
+import '../home_controller.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final fitnessState = ref.watch(fitnessProvider);
+  String _errorMessage(Object error, String fallback) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map && data['error'] is String) {
+        return data['error'] as String;
+      }
+      return 'Não foi possível conectar ao servidor.';
+    }
+    return fallback;
+  }
 
-    return Scaffold(
-      appBar: HomeHeaderWidget(fitnessState: fitnessState),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // COLUNA 1: Trilha de Exercícios (Com Linhas Conectoras)
-            Expanded(
-              child: Column(
-                children: [
-                  const _ColumnHeader(
-                    title: 'EXERCÍCIOS',
-                    icon: Icons.fitness_center,
-                  ),
-                  const SizedBox(height: 30),
-                  _WorkoutPathWidget(
-                    nodes: fitnessState.workoutNodes,
-                    onNodeTap: (node) {
-                      ref
-                          .read(fitnessProvider.notifier)
-                          .completeWorkout(node.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          backgroundColor: AppTheme.crimsonRed,
-                          content: Text('Treino concluído! 🔥'),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 20),
-
-            // COLUNA 2: Trilha de Alimentação (Com Linhas Conectoras)
-            Expanded(
-              child: Column(
-                children: [
-                  const _ColumnHeader(
-                    title: 'ALIMENTAÇÃO',
-                    icon: Icons.restaurant,
-                  ),
-                  const SizedBox(height: 30),
-                  _DietPathWidget(
-                    nodes: fitnessState.dietNodes,
-                    onNodeTap: (node) {
-                      _showDietModal(context, ref, node);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+  void _showSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.crimsonRed,
+        content: Text(message),
       ),
     );
   }
 
-  void _showDietModal(BuildContext context, WidgetRef ref, DietNode node) {
-    showModalBottomSheet(
+  /// Abre o modal de detalhe do TREINO e conclui quando confirmado.
+  Future<void> _openWorkoutDetail(
+    BuildContext context,
+    WidgetRef ref,
+    TrailItemEntry item,
+    bool doneToday,
+  ) async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Consumer(
-          builder: (context, refConsumer, _) {
-            final currentDietNode = refConsumer
-                .watch(fitnessProvider)
-                .dietNodes
-                .firstWhere((element) => element.id == node.id);
-
-            return DietChecklistModal(
-              dietNode: currentDietNode,
-              onMealToggled: (mealIndex, isConsumed) {
-                refConsumer
-                    .read(fitnessProvider.notifier)
-                    .toggleMeal(node.id, mealIndex, isConsumed);
-              },
-            );
+        return WorkoutDetailModal(
+          title: item.title,
+          description: item.description,
+          value: item.value,
+          isCompleted: item.completed,
+          dailyLimitReached: doneToday,
+          onComplete: () async {
+            try {
+              await ref.read(homeProvider.notifier).completeWorkout(item.id);
+              if (context.mounted) {
+                Navigator.pop(context);
+                _showSnack(context, 'Treino concluído! 🔥');
+              }
+            } catch (e) {
+              if (context.mounted) {
+                _showSnack(
+                  context,
+                  _errorMessage(e, 'Não foi possível concluir o treino.'),
+                );
+              }
+            }
           },
         );
       },
+    );
+  }
+
+  /// Abre o modal de check-list da ALIMENTAÇÃO.
+  ///
+  /// Cada item da trilha de nutrição é um DIA: o modal abre com TODAS as
+  /// refeições desse dia, e cada uma é liberada pelo próprio horário
+  /// (Café 6h, Almoço 12h, Café da Tarde 15h, Jantar 20h).
+  Future<void> _openDietDetail(
+    BuildContext context,
+    WidgetRef ref,
+    TrailItemEntry item,
+  ) async {
+    final meals = item.meals.isNotEmpty
+        ? item.meals
+              .map(
+                (m) => MealItem(
+                  title: m.title,
+                  description: m.description.isEmpty ? m.value : m.description,
+                  isConsumed: m.consumed,
+                  requiredHour: m.requiredHour,
+                ),
+              )
+              .toList()
+        // Item antigo (sem refeições no backend): mostra a própria etapa.
+        : [
+            MealItem(
+              title: item.title,
+              description: item.description.isEmpty ? item.value : item.description,
+              isConsumed: item.completed,
+            ),
+          ];
+
+    final dietNode = DietNode(
+      id: item.id,
+      dayTitle: item.title,
+      meals: meals,
+    );
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DietChecklistModal(
+          dietNode: dietNode,
+          onMealToggled: (mealIndex, isConsumed) async {
+            try {
+              await ref
+                  .read(homeProvider.notifier)
+                  .toggleMeal(
+                    item.id,
+                    mealIndex: mealIndex,
+                    checked: isConsumed,
+                  );
+            } catch (e) {
+              if (context.mounted) {
+                _showSnack(
+                  context,
+                  _errorMessage(e, 'Não foi possível marcar a refeição.'),
+                );
+              }
+            }
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fitnessAsync = ref.watch(homeProvider);
+    final fitnessState = fitnessAsync.value ?? const FitnessState();
+
+    return Scaffold(
+      appBar: HomeHeaderWidget(fitnessState: fitnessState),
+      body: fitnessAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppTheme.crimsonRed),
+        ),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  size: 48,
+                  color: Color(0xFF555555),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Não foi possível carregar suas trilhas.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF888888)),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.crimsonRed),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: AppTheme.crimsonRed,
+                  ),
+                  label: const Text(
+                    'Tentar novamente',
+                    style: TextStyle(
+                      color: AppTheme.crimsonRed,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: () => ref.read(homeProvider.notifier).reload(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (_) => SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // COLUNA 1: Trilhas de Exercícios (um card/botão por trilha)
+              Expanded(
+                child: _TrailColumn(
+                  title: 'EXERCÍCIOS',
+                  icon: Icons.fitness_center,
+                  kind: 'workout',
+                  trails: fitnessState.workoutTrails,
+                  doneToday: fitnessState.workoutDoneToday,
+                  emptyMessage: 'Nenhum treino disponível.\nGere uma trilha!',
+                  onStepTap: (item) => _openWorkoutDetail(
+                    context,
+                    ref,
+                    item,
+                    fitnessState.workoutDoneToday,
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 16),
+
+              // COLUNA 2: Trilhas de Alimentação (um card/botão por trilha)
+              Expanded(
+                child: _TrailColumn(
+                  title: 'ALIMENTAÇÃO',
+                  icon: Icons.restaurant,
+                  kind: 'nutrition',
+                  trails: fitnessState.dietTrails,
+                  doneToday: fitnessState.nutritionDoneToday,
+                  emptyMessage: 'Nenhum plano alimentar disponível.',
+                  onStepTap: (item) => _openDietDetail(context, ref, item),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Coluna de um tipo: cabeçalho + banner do limite diário + cards de trilhas.
+class _TrailColumn extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final String kind; // "workout" | "nutrition"
+  final List<TrailEntry> trails;
+  final bool doneToday;
+  final String emptyMessage;
+  final void Function(TrailItemEntry item) onStepTap;
+
+  const _TrailColumn({
+    required this.title,
+    required this.icon,
+    required this.kind,
+    required this.trails,
+    required this.doneToday,
+    required this.emptyMessage,
+    required this.onStepTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _ColumnHeader(title: title, icon: icon),
+        const SizedBox(height: 14),
+        if (doneToday) ...[
+          _DailyLimitBanner(kind: kind),
+          const SizedBox(height: 10),
+        ],
+        if (trails.isEmpty)
+          _EmptyColumnMessage(message: emptyMessage)
+        else
+          for (final trail in trails)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _TrailCard(
+                trail: trail,
+                typeIcon: icon,
+                doneToday: doneToday,
+                onStepTap: onStepTap,
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+/// Card/botão de UMA trilha. As etapas ficam dentro (acordeão).
+class _TrailCard extends StatefulWidget {
+  final TrailEntry trail;
+  final IconData typeIcon;
+  final bool doneToday;
+  final void Function(TrailItemEntry item) onStepTap;
+
+  const _TrailCard({
+    required this.trail,
+    required this.typeIcon,
+    required this.doneToday,
+    required this.onStepTap,
+  });
+
+  @override
+  State<_TrailCard> createState() => _TrailCardState();
+}
+
+class _TrailCardState extends State<_TrailCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final trail = widget.trail;
+    final isDone = trail.isFullyCompleted;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDone ? AppTheme.crimsonAccent : const Color(0xFF2C2C2C),
+        ),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(widget.typeIcon, color: AppTheme.crimsonRed, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          trail.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textMain,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          trail.level.isEmpty
+                              ? '${trail.completedItems}/${trail.totalItems} etapas'
+                              : '${trail.level} • ${trail.completedItems}/${trail.totalItems}',
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (isDone)
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppTheme.crimsonAccent,
+                      size: 20,
+                    )
+                  else
+                    Icon(
+                      _expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: AppTheme.textMuted,
+                      size: 22,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          // Barra de progresso da trilha
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: trail.totalItems == 0 ? 0 : trail.percent / 100,
+                minHeight: 4,
+                backgroundColor: const Color(0xFF232323),
+                valueColor: const AlwaysStoppedAnimation(AppTheme.crimsonRed),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Etapas DENTRO do card (visíveis ao expandir)
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _TrailSteps(
+                items: trail.items,
+                typeIcon: widget.typeIcon,
+                doneToday: widget.doneToday,
+                onStepTap: widget.onStepTap,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Caminho de etapas (Duolingo) renderizado dentro do card expandido.
+class _TrailSteps extends StatelessWidget {
+  final List<TrailItemEntry> items;
+  final IconData typeIcon;
+  final bool doneToday;
+  final void Function(TrailItemEntry item) onStepTap;
+
+  const _TrailSteps({
+    required this.items,
+    required this.typeIcon,
+    required this.doneToday,
+    required this.onStepTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final completedStates = items.map((e) => e.completed).toList();
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: CustomPaint(
+            painter: PathConnectorPainter(
+              nodeCount: items.length,
+              completedStates: completedStates,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              for (var i = 0; i < items.length; i++)
+                _buildStep(context, items[i], i),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep(BuildContext context, TrailItemEntry item, int index) {
+    final previousDone = index == 0 ||
+        (items[index - 1].completed == true);
+    final lockedByDailyLimit = doneToday && !item.completed;
+    final isLocked = !previousDone || lockedByDailyLimit;
+    final double alignX = (index % 2 == 0) ? -0.25 : 0.25;
+
+    // Em dias de alimentação o nó mostra o quanto do dia já foi consumido
+    // (ex.: "Dia 1  2/4"), para ficar claro que o dia está em andamento.
+    final label = item.meals.isEmpty
+        ? item.title
+        : '${item.title}  ${item.mealsDone}/${item.meals.length}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 26),
+      child: Align(
+        alignment: Alignment(alignX, 0),
+        child: PathNodeWidget(
+          label: label,
+          icon: typeIcon,
+          isCompleted: item.completed,
+          isLocked: isLocked,
+          onTap: () => onStepTap(item),
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyLimitBanner extends StatelessWidget {
+  final String kind; // "workout" | "nutrition"
+
+  const _DailyLimitBanner({required this.kind});
+
+  @override
+  Widget build(BuildContext context) {
+    final isNutrition = kind == 'nutrition';
+    final message = isNutrition
+        ? 'Dia de hoje concluído — limite: 1 dia por dia'
+        : 'Treino de hoje concluído — limite: 1 por dia';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.crimsonRed.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.crimsonRed),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_clock, color: AppTheme.crimsonAccent, size: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: AppTheme.crimsonAccent,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyColumnMessage extends StatelessWidget {
+  final String message;
+
+  const _EmptyColumnMessage({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Color(0xFF666666), fontSize: 13),
+      ),
     );
   }
 }
@@ -135,96 +566,6 @@ class _ColumnHeader extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _WorkoutPathWidget extends StatelessWidget {
-  final List<WorkoutNode> nodes;
-  final Function(WorkoutNode node) onNodeTap;
-
-  const _WorkoutPathWidget({required this.nodes, required this.onNodeTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final completedStates = nodes.map((n) => n.isCompleted).toList();
-
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: CustomPaint(
-            painter: PathConnectorPainter(
-              nodeCount: nodes.length,
-              completedStates: completedStates,
-            ),
-          ),
-        ),
-        Column(
-          children: List.generate(nodes.length, (index) {
-            final node = nodes[index];
-            final double alignX = (index % 2 == 0) ? -0.3 : 0.3;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 32.0),
-              child: Align(
-                alignment: Alignment(alignX, 0),
-                child: PathNodeWidget(
-                  label: node.title,
-                  icon: Icons.play_arrow_rounded,
-                  isCompleted: node.isCompleted,
-                  isLocked: node.isLocked,
-                  onTap: () => onNodeTap(node),
-                ),
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-}
-
-class _DietPathWidget extends StatelessWidget {
-  final List<DietNode> nodes;
-  final Function(DietNode node) onNodeTap;
-
-  const _DietPathWidget({required this.nodes, required this.onNodeTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final completedStates = nodes.map((n) => n.isCompleted).toList();
-
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: CustomPaint(
-            painter: PathConnectorPainter(
-              nodeCount: nodes.length,
-              completedStates: completedStates,
-            ),
-          ),
-        ),
-        Column(
-          children: List.generate(nodes.length, (index) {
-            final node = nodes[index];
-            final double alignX = (index % 2 == 0) ? -0.3 : 0.3;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 32.0),
-              child: Align(
-                alignment: Alignment(alignX, 0),
-                child: PathNodeWidget(
-                  label: node.dayTitle,
-                  icon: Icons.restaurant_menu,
-                  isCompleted: node.isCompleted,
-                  isLocked: node.isLocked,
-                  onTap: () => onNodeTap(node),
-                ),
-              ),
-            );
-          }),
-        ),
-      ],
     );
   }
 }

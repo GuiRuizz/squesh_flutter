@@ -8,11 +8,24 @@ abstract class ApiEndpoints {
   // Auth
   static const String login = '/auth/login';
   static const String register = '/auth/register';
+  static const String logout = '/auth/logout';
 
   // Posts
   static const String posts = '/posts';
+  static const String postsFeed = '/posts/feed';
+  static String postComments(String id) => '/posts/$id/comments';
+  static String postLikes(String id) => '/posts/$id/likes';
+  static String likePost(String id) => '/posts/$id/like';
   static String updatePost(String id) => '/posts/$id';
   static String deletePost(String id) => '/posts/$id';
+
+  // Follow
+  static String followUser(String id) => '/users/$id/follow';
+  static String userFollowers(String id) => '/users/$id/followers';
+  static String userFollowing(String id) => '/users/$id/following';
+
+  // Uploads (URL assinada — o arquivo NUNCA passa pelo servidor)
+  static const String uploadsPresign = '/uploads/presign';
 
   // Trails
   static const String trails = '/trails';
@@ -20,9 +33,22 @@ abstract class ApiEndpoints {
   static String generateTrailItems(String id) => '/trails/$id/generate';
   static String completeTrailItem(String itemId) =>
       '/trails/items/$itemId/complete';
-  static String toggleMealCheck(String itemId, int mealIndex) =>
-      '/trails/items/$itemId/meals/$mealIndex';
+
+  // PATCH sem índice (recomendado); a rota com :mealIndex segue disponível
+  static String toggleMealCheck(String itemId) => '/trails/items/$itemId/meals';
   static String addTrailItem(String trailId) => '/trails/$trailId/items';
+
+  // Minhas trilhas
+  static String activeTrail([String? type]) =>
+      (type == null || type.isEmpty)
+          ? '/trails/me/active'
+          : '/trails/me/active?type=$type';
+  static const String completedTrails = '/trails/me/completed';
+  static const String generateCompleteTrail = '/trails/generate';
+
+  // Todas as trilhas com progresso individual (alimenta os cards da Home)
+  static String myTrails([String? type]) =>
+      (type == null || type.isEmpty) ? '/trails/me' : '/trails/me?type=$type';
 
   // Shop
   static const String shop = '/shop';

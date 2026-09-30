@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../auth/presentation/auth_controller.dart';
 import '../../profile/presentation/my_posts_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -369,7 +370,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            onPressed: () {},
+            onPressed: () {
+              ref.read(authControllerProvider.notifier).logout();
+            },
           ),
         ],
       ),

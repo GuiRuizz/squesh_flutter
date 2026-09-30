@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:squesh_flutter/features/auth/presentation/auth_controller.dart';
+import 'package:squesh_flutter/features/auth/presentation/login_screen.dart';
+import 'package:squesh_flutter/features/auth/presentation/splash_screen.dart';
 import 'package:squesh_flutter/features/notification/presentation/notification_screen.dart';
 
 import '../features/home/presentation/home_screen.dart';
@@ -27,135 +31,128 @@ CustomTransitionPage<void> _buildCustomPageTransition({
   );
 }
 
-// Configuração das rotas
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
-  routes: [
-    // Rotas das Abas Principais (com Bottom Navigation Shell)
-    StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) {
-        return MainNavigationShell(navigationShell: navigationShell);
-      },
-      branches: [
-        // Aba 0: Home Screen
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/',
-              pageBuilder: (context, state) => _buildCustomPageTransition(
-                state: state,
-                child: const HomeScreen(),
+/// Configuração das rotas. É um Provider porque o redirect depende do estado
+/// de autenticação (authControllerProvider): deslogado só enxerga /login,
+/// logado enxerga o app, e em restauração de sessão mostra o /splash.
+final routerProvider = Provider<GoRouter>((ref) {
+  final router = GoRouter(
+    initialLocation: '/',
+    redirect: (context, state) {
+      final authState = ref.read(authControllerProvider);
+      final location = state.matchedLocation;
+
+      // 1. Sessão ainda sendo restaurada -> splash
+      if (authState.isLoading) {
+        return location == '/splash' ? null : '/splash';
+      }
+
+      final isAuthenticated = authState.value != null;
+
+      // 2. Deslogado: só pode ficar na tela de login
+      if (!isAuthenticated) {
+        return location == '/login' ? null : '/login';
+      }
+
+      // 3. Logado: não pode ficar na tela de login NEM na de splash (sessão
+      // restaurada). Qualquer outra rota é do app e deve ser liberada.
+      return (location == '/login' || location == '/splash') ? '/' : null;
+    },
+    routes: [
+      // Rotas de autenticação (fullscreen, fora da bottom navigation)
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+
+      // Rotas das Abas Principais (com Bottom Navigation Shell)
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainNavigationShell(navigationShell: navigationShell);
+        },
+        branches: [
+          // Aba 0: Home Screen
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                pageBuilder: (context, state) => _buildCustomPageTransition(
+                  state: state,
+                  child: const HomeScreen(),
+                ),
               ),
-            ),
-          ],
-        ),
-
-        // Aba 1: Ranking
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/ranking',
-              pageBuilder: (context, state) => _buildCustomPageTransition(
-                state: state,
-                child: const RankingScreen(),
-              ),
-            ),
-          ],
-        ),
-
-        // Aba 2: Fotos / Compartilhar
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/photos',
-              pageBuilder: (context, state) => _buildCustomPageTransition(
-                state: state,
-                child: const PhotosScreen(),
-              ),
-            ),
-          ],
-        ),
-
-        // Aba 3: Loja
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/shop',
-              pageBuilder: (context, state) => _buildCustomPageTransition(
-                state: state,
-                child: const ShopScreen(),
-              ),
-            ),
-          ],
-        ),
-
-        // Aba 4: Configurações
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/settings',
-              pageBuilder: (context, state) => _buildCustomPageTransition(
-                state: state,
-                child: const SettingsScreen(),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-
-    // Rota independente (Fullscreen Overlay, esconde a BottomNavBar)
-    GoRoute(
-      path: '/notifications',
-      builder: (context, state) {
-        return NotificationScreen();
-      },
-    ),
-  ],
-);
-
-// Widget genérico de Placeholder para as rotas em desenvolvimento
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const _PlaceholderScreen({required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF141414),
-        elevation: 0,
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFFFF1E40), // AppTheme.crimsonRed
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-            letterSpacing: 1.2,
+            ],
           ),
-        ),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 64, color: const Color(0xFF333333)),
-            const SizedBox(height: 16),
-            Text(
-              'Página de $title em breve...',
-              style: const TextStyle(
-                color: Color(0xFF666666),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+
+          // Aba 1: Ranking
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/ranking',
+                pageBuilder: (context, state) => _buildCustomPageTransition(
+                  state: state,
+                  child: const RankingScreen(),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+
+          // Aba 2: Fotos / Compartilhar
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/photos',
+                pageBuilder: (context, state) => _buildCustomPageTransition(
+                  state: state,
+                  child: const PhotosScreen(),
+                ),
+              ),
+            ],
+          ),
+
+          // Aba 3: Loja
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/shop',
+                pageBuilder: (context, state) => _buildCustomPageTransition(
+                  state: state,
+                  child: const ShopScreen(),
+                ),
+              ),
+            ],
+          ),
+
+          // Aba 4: Configurações
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                pageBuilder: (context, state) => _buildCustomPageTransition(
+                  state: state,
+                  child: const SettingsScreen(),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
-    );
-  }
-}
+
+      // Rota independente (Fullscreen Overlay, esconde a BottomNavBar)
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) {
+          return NotificationScreen();
+        },
+      ),
+    ],
+  );
+
+  // Sempre que o auth mudar (login/logout), reavalia o redirect.
+  ref.listen(authControllerProvider, (_, _) => router.refresh());
+
+  return router;
+});

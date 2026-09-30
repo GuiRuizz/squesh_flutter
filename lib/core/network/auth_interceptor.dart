@@ -43,11 +43,11 @@ class AuthInterceptor extends QueuedInterceptor {
 
       final response = await tokenDio.post(
         '/auth/refresh',
-        data: {'refreshToken': refreshToken},
+        data: {'refresh_token': refreshToken},
       );
 
-      final newAccessToken = response.data['accessToken'];
-      final newRefreshToken = response.data['refreshToken'];
+      final newAccessToken = response.data['token'];
+      final newRefreshToken = response.data['refresh_token'];
 
       // Salva os novos tokens no armazenamento seguro
       await _tokenStorage.saveTokens(
