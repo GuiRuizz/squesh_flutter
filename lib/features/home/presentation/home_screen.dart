@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:squesh_flutter/widgets/home_header_widget.dart';
 import '../../../app/theme/app_theme.dart';
-import '../../../widgets/diet_checklist_modal.dart';
 import '../../../widgets/path_connector_painter.dart';
 import '../../../widgets/path_node_widget.dart';
-import '../../../widgets/workout_detail_modal.dart';
+import '../../../widgets/trail_detail_modal.dart';
 import '../../diet_path/daily_progress_controller.dart';
-import '../../diet_path/domain/diet_node.dart';
 import '../domain/trail_entry.dart';
 import '../home_controller.dart';
 
@@ -35,24 +33,51 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// Abre o modal de detalhe do TREINO e conclui quando confirmado.
-  Future<void> _openWorkoutDetail(
+  /// Abre o modal de detalhe de uma ETAPA da trilha: uma SESSÃO de treino
+  /// (com os exercícios) ou um DIA de alimentação (com as refeições liberadas
+  /// pelo horário). Mesma mecânica nos dois tipos.
+  Future<void> _openTrailDetail(
     BuildContext context,
     WidgetRef ref,
     TrailItemEntry item,
-    bool doneToday,
+    String kind,
   ) async {
+    final isNutrition = kind == 'nutrition';
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return WorkoutDetailModal(
-          title: item.title,
-          description: item.description,
-          value: item.value,
-          isCompleted: item.completed,
-          dailyLimitReached: doneToday,
+        return TrailDetailModal(
+          item: item,
+          icon: isNutrition ? Icons.restaurant_menu : Icons.fitness_center,
+          stepLabel: isNutrition ? 'o dia' : 'o treino',
+          hint: isNutrition
+              ? 'Consuma os alimentos e marque as refeições'
+              : 'Execute os exercícios e marque conforme for fazendo',
+          completeMessage: isNutrition
+              ? 'Dia completo! Todas as refeições foram marcadas.'
+              : 'Sessão completa! Todos os exercícios foram marcados.',
+          onStepToggled: (stepIndex, isChecked) async {
+            try {
+              await ref
+                  .read(homeProvider.notifier)
+                  .toggleStep(
+                    item.id,
+                    stepIndex: stepIndex,
+                    checked: isChecked,
+                  );
+            } catch (e) {
+              if (context.mounted) {
+                _showSnack(
+                  context,
+                  _errorMessage(e, 'Não foi possível marcar.'),
+                );
+              }
+              rethrow;
+            }
+          },
           onComplete: () async {
             try {
               await ref.read(homeProvider.notifier).completeWorkout(item.id);
@@ -67,72 +92,7 @@ class HomeScreen extends ConsumerWidget {
                   _errorMessage(e, 'Não foi possível concluir o treino.'),
                 );
               }
-            }
-          },
-        );
-      },
-    );
-  }
-
-  /// Abre o modal de check-list da ALIMENTAÇÃO.
-  ///
-  /// Cada item da trilha de nutrição é um DIA: o modal abre com TODAS as
-  /// refeições desse dia, e cada uma é liberada pelo próprio horário
-  /// (Café 6h, Almoço 12h, Café da Tarde 15h, Jantar 20h).
-  Future<void> _openDietDetail(
-    BuildContext context,
-    WidgetRef ref,
-    TrailItemEntry item,
-  ) async {
-    final meals = item.meals.isNotEmpty
-        ? item.meals
-              .map(
-                (m) => MealItem(
-                  title: m.title,
-                  description: m.description.isEmpty ? m.value : m.description,
-                  isConsumed: m.consumed,
-                  requiredHour: m.requiredHour,
-                ),
-              )
-              .toList()
-        // Item antigo (sem refeições no backend): mostra a própria etapa.
-        : [
-            MealItem(
-              title: item.title,
-              description: item.description.isEmpty ? item.value : item.description,
-              isConsumed: item.completed,
-            ),
-          ];
-
-    final dietNode = DietNode(
-      id: item.id,
-      dayTitle: item.title,
-      meals: meals,
-    );
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return DietChecklistModal(
-          dietNode: dietNode,
-          onMealToggled: (mealIndex, isConsumed) async {
-            try {
-              await ref
-                  .read(homeProvider.notifier)
-                  .toggleMeal(
-                    item.id,
-                    mealIndex: mealIndex,
-                    checked: isConsumed,
-                  );
-            } catch (e) {
-              if (context.mounted) {
-                _showSnack(
-                  context,
-                  _errorMessage(e, 'Não foi possível marcar a refeição.'),
-                );
-              }
+              rethrow;
             }
           },
         );
@@ -207,12 +167,8 @@ class HomeScreen extends ConsumerWidget {
                   trails: fitnessState.workoutTrails,
                   doneToday: fitnessState.workoutDoneToday,
                   emptyMessage: 'Nenhum treino disponível.\nGere uma trilha!',
-                  onStepTap: (item) => _openWorkoutDetail(
-                    context,
-                    ref,
-                    item,
-                    fitnessState.workoutDoneToday,
-                  ),
+                  onStepTap: (item) =>
+                      _openTrailDetail(context, ref, item, 'workout'),
                 ),
               ),
 
@@ -227,7 +183,8 @@ class HomeScreen extends ConsumerWidget {
                   trails: fitnessState.dietTrails,
                   doneToday: fitnessState.nutritionDoneToday,
                   emptyMessage: 'Nenhum plano alimentar disponível.',
-                  onStepTap: (item) => _openDietDetail(context, ref, item),
+                  onStepTap: (item) =>
+                      _openTrailDetail(context, ref, item, 'nutrition'),
                 ),
               ),
             ],
@@ -456,11 +413,12 @@ class _TrailSteps extends StatelessWidget {
     final isLocked = !previousDone || lockedByDailyLimit;
     final double alignX = (index % 2 == 0) ? -0.25 : 0.25;
 
-    // Em dias de alimentação o nó mostra o quanto do dia já foi consumido
-    // (ex.: "Dia 1  2/4"), para ficar claro que o dia está em andamento.
-    final label = item.meals.isEmpty
+    // Quando a etapa tem partes (dia de alimentação / sessão de treino) o nó
+    // mostra o quanto já foi feito (ex.: "Sessão A  2/5"), para ficar claro
+    // que está em andamento.
+    final label = item.steps.isEmpty
         ? item.title
-        : '${item.title}  ${item.mealsDone}/${item.meals.length}';
+        : '${item.title}  ${item.stepsDone}/${item.steps.length}';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 26),

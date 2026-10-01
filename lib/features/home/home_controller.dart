@@ -24,18 +24,19 @@ class HomeNotifier extends AsyncNotifier<FitnessState> {
     final trails = ref.read(trailsApiServiceProvider);
     final user = ref.read(userApiServiceProvider);
 
-    final results = await Future.wait([
-      trails.getMyTrails('workout'),
-      trails.getMyTrails('nutrition'),
-      user.getProfile(),
-    ]);
+    // Três chamadas independentes: uma de cada vez deixa o erro dizer qual
+    // delas falhou, e o tipo de cada resposta continua bom (o Future.wait
+    // misturava tudo em List<Object> e obrigava a castar no meio).
+    final workout = await trails.getMyTrails('workout');
+    final nutrition = await trails.getMyTrails('nutrition');
+    final profile = await user.getProfile();
 
     return FitnessState(
-      workoutTrails: _parseTrails(results[0].data),
-      dietTrails: _parseTrails(results[1].data),
-      workoutDoneToday: _todayDone(results[0].data, 'workout'),
-      nutritionDoneToday: _todayDone(results[1].data, 'nutrition'),
-      streakCount: ((results[2].data as Map)['streak'] as num?)?.toInt() ?? 0,
+      workoutTrails: _parseTrails(workout.data),
+      dietTrails: _parseTrails(nutrition.data),
+      workoutDoneToday: _todayDone(workout.data, 'workout'),
+      nutritionDoneToday: _todayDone(nutrition.data, 'nutrition'),
+      streakCount: profile.streak,
     );
   }
 
@@ -54,18 +55,19 @@ class HomeNotifier extends AsyncNotifier<FitnessState> {
     await reload();
   }
 
-  /// Marca/desmarca uma refeição do dia (PATCH /trails/items/:id/meals).
+  /// Marca/desmarca UMA etapa interna do item (refeição do dia ou exercício da
+  /// sessão) via PATCH /trails/items/:id/steps.
   ///
-  /// [mealIndex] é a posição da refeição dentro do dia; as demais do mesmo dia
-  /// continuam liberadas (o limite de 1/dia vale para trocar de DIA).
-  Future<void> toggleMeal(
+  /// [stepIndex] é a posição dentro do item; as demais etapas do mesmo
+  /// item/dia continuam liberadas (o limite de 1/dia vale para trocar de item).
+  Future<void> toggleStep(
     String itemId, {
-    required int mealIndex,
+    required int stepIndex,
     required bool checked,
   }) async {
     await ref
         .read(trailsApiServiceProvider)
-        .toggleMealCheck(itemId, mealIndex: mealIndex, checked: checked);
+        .toggleStepCheck(itemId, stepIndex: stepIndex, checked: checked);
     await reload();
   }
 

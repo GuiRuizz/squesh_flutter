@@ -52,18 +52,18 @@ class TrailsApiService {
     return await _dio.post(ApiEndpoints.completeTrailItem(itemId));
   }
 
-  // PATCH /api/v1/trails/items/:itemId/meals
+  // PATCH /api/v1/trails/items/:itemId/steps
   //
-  // [mealIndex] é a refeição do dia (obrigatório quando o dia tem refeições).
-  // [checked] é o estado desejado; sem ele o backend alterna.
-  Future<Response> toggleMealCheck(
+  // [stepIndex] é a etapa dentro do item (refeição do dia / exercício da
+  // sessão). [checked] é o estado desejado; sem ele o backend alterna.
+  Future<Response> toggleStepCheck(
     String itemId, {
-    int? mealIndex,
+    int? stepIndex,
     bool? checked,
   }) async {
     return await _dio.patch(
-      ApiEndpoints.toggleMealCheck(itemId),
-      data: {'meal_index': ?mealIndex, 'checked': ?checked},
+      ApiEndpoints.toggleTrailStep(itemId),
+      data: {'step_index': ?stepIndex, 'checked': ?checked},
     );
   }
 

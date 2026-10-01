@@ -1,32 +1,39 @@
-/// Uma refeição dentro de um DIA de alimentação.
-///
-/// Em trilhas de NUTRIÇÃO cada item da trilha é um dia e traz a lista das
-/// refeições desse dia, cada uma com a hora em que é liberada no App.
-class MealEntry {
-  final String slot; // "cafe_manha" | "almoco" | "cafe_tarde" | "jantar"
-  final String title; // "Café da Manhã"
-  final String description; // "3 ovos mexidos + café sem açúcar"
-  final String value;
-  final int requiredHour; // hora mínima para marcar (6, 12, 15, 20)
-  final bool consumed; // o usuário já marcou esta refeição
+/// Uma etapa interna de um item da trilha:
+///   - em NUTRIÇÃO, o item é um DIA e as etapas são as refeições (Café da Manhã,
+///     Almoço...), cada uma liberada pelo próprio horário;
+///   - em TREINO, o item é uma SESSÃO e as etapas são os exercícios.
+class StepEntry {
+  final String slot; // "cafe_manha" | "supino_reto"
+  final String title; // "Café da Manhã" | "Supino Reto com Barra"
+  final String description;
+  final String value; // ex.: "4 séries de 10 a 12"
+  final int requiredHour; // hora mínima para marcar (0 = sem trava de horário)
+  final bool done; // o usuário já marcou esta etapa
 
-  const MealEntry({
+  const StepEntry({
     required this.slot,
     required this.title,
     required this.description,
     required this.value,
     required this.requiredHour,
-    required this.consumed,
+    required this.done,
   });
 
-  factory MealEntry.fromJson(Map<String, dynamic> json) {
-    return MealEntry(
+  /// Texto de apoio exibido no modal: junta a meta (value) e a descrição.
+  String get subtitle {
+    if (value.isEmpty) return description;
+    if (description.isEmpty) return value;
+    return '$value • $description';
+  }
+
+  factory StepEntry.fromJson(Map<String, dynamic> json) {
+    return StepEntry(
       slot: json['slot'] as String? ?? '',
-      title: json['title'] as String? ?? 'Refeição',
+      title: json['title'] as String? ?? 'Etapa',
       description: json['description'] as String? ?? '',
       value: json['value'] as String? ?? '',
       requiredHour: (json['required_hour'] as num?)?.toInt() ?? 0,
-      consumed: json['consumed'] as bool? ?? false,
+      done: json['done'] as bool? ?? false,
     );
   }
 }
@@ -43,8 +50,9 @@ class TrailItemEntry {
   final int order;
   final bool completed;
 
-  /// Refeições do dia (vazio em itens de TREINO, que não têm refeições).
-  final List<MealEntry> meals;
+  /// Etapas internas do item (refeições do dia / exercícios da sessão).
+  /// Vazio em itens antigos, que são concluídos com um check só.
+  final List<StepEntry> steps;
 
   const TrailItemEntry({
     required this.id,
@@ -53,17 +61,14 @@ class TrailItemEntry {
     required this.value,
     required this.order,
     required this.completed,
-    this.meals = const [],
+    this.steps = const [],
   });
 
-  /// Quantas refeições do dia já foram marcadas.
-  int get mealsDone => meals.where((m) => m.consumed).length;
-
-  /// O dia só está completo quando todas as refeições foram marcadas.
-  bool get isDayComplete => meals.isNotEmpty && mealsDone == meals.length;
+  /// Quantas etapas internas já foram marcadas (ex.: "2/5 exercícios").
+  int get stepsDone => steps.where((s) => s.done).length;
 
   factory TrailItemEntry.fromJson(Map<String, dynamic> json) {
-    final mealsJson = json['meals'];
+    final stepsJson = json['steps'];
     return TrailItemEntry(
       id: json['id'] as String,
       title: json['title'] as String? ?? 'Etapa',
@@ -71,10 +76,10 @@ class TrailItemEntry {
       value: json['value'] as String? ?? '',
       order: json['order'] as int? ?? 0,
       completed: json['completed'] as bool? ?? false,
-      meals: [
-        if (mealsJson is List)
-          for (final m in mealsJson)
-            if (m is Map) MealEntry.fromJson(Map<String, dynamic>.from(m)),
+      steps: [
+        if (stepsJson is List)
+          for (final s in stepsJson)
+            if (s is Map) StepEntry.fromJson(Map<String, dynamic>.from(s)),
       ],
     );
   }
