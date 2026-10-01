@@ -22,10 +22,8 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     }
 
     try {
-      final response = await ref.read(userApiServiceProvider).getProfile();
-      return AuthUser.fromJson(
-        Map<String, dynamic>.from(response.data as Map),
-      );
+      final profile = await ref.read(userApiServiceProvider).getProfile();
+      return AuthUser.fromProfile(profile);
     } on DioException catch (e) {
       // Token expirado/inválido: derruba a sessão para o fluxo de refresh
       // tentar de novo ou o usuário relogar.
@@ -85,11 +83,7 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     final token = await ref.read(tokenStorageProvider).getAccessToken();
     if (token == null) return;
 
-    final response = await ref.read(userApiServiceProvider).getProfile();
-    state = AsyncData(
-      AuthUser.fromJson(
-        Map<String, dynamic>.from(response.data as Map),
-      ),
-    );
+    final profile = await ref.read(userApiServiceProvider).getProfile();
+    state = AsyncData(AuthUser.fromProfile(profile));
   }
 }
