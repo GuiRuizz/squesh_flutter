@@ -54,8 +54,13 @@ abstract class ApiEndpoints {
   // Shop
   static const String shop = '/shop';
   static String shopItemById(String id) => '/shop/$id';
-  static const String shopBuy = '/shop/buy';
   static const String shopInventory = '/shop/inventory';
+
+  // Pedido do carrinho. O pagamento e confirmado pelo Go (hoje via admin,
+  // depois via webhook do Stripe): o app so cria e acompanha o pedido.
+  static const String shopOrders = '/shop/orders';
+  static String shopOrder(String id) => '/shop/orders/$id';
+  static String shopOrderCancel(String id) => '/shop/orders/$id/cancel';
 
   // Notifications
   static const String notifications = '/notifications';
