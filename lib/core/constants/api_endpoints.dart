@@ -34,8 +34,9 @@ abstract class ApiEndpoints {
   static String completeTrailItem(String itemId) =>
       '/trails/items/$itemId/complete';
 
-  // PATCH sem índice (recomendado); a rota com :mealIndex segue disponível
-  static String toggleMealCheck(String itemId) => '/trails/items/$itemId/meals';
+  // Marca/desmarca UMA etapa interna do item (refeição do dia ou exercício
+  // da sessão). O item sem etapas usa completeTrailItem acima.
+  static String toggleTrailStep(String itemId) => '/trails/items/$itemId/steps';
   static String addTrailItem(String trailId) => '/trails/$trailId/items';
 
   // Minhas trilhas
@@ -68,4 +69,14 @@ abstract class ApiEndpoints {
   static const String userStreak = '/users/me/streak';
   static const String userRanking = '/users/ranking';
   static const String updatePassword = '/users/me/password';
+  static const String userPreferences = '/users/me/preferences';
+  static const String userMyPosts = '/users/me/posts';
+
+  // Assinatura, formas de pagamento e enderecos (tela de Configuracoes)
+  static const String plans = '/plans';
+  static const String userSubscription = '/users/me/subscription';
+  static const String userPaymentMethods = '/users/me/payment-methods';
+  static String userPaymentMethod(String id) => '/users/me/payment-methods/$id';
+  static const String userAddresses = '/users/me/addresses';
+  static String userAddress(String id) => '/users/me/addresses/$id';
 }
