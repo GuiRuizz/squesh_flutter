@@ -22,150 +22,79 @@ class PhotosScreen extends ConsumerWidget {
   ) async {
     final picker = ImagePicker();
 
-    final XFile? pickedFile = await picker.pickImage(
-      source: source,
-      imageQuality: 80,
-      maxWidth: 1080,
-    );
+    // O picker pode lançar (sem galeria, permissão negada, câmera indisponível):
+    // sem este try/catch a exceção sumia e a tela parecia "não fazer nada".
+    XFile? pickedFile;
+    try {
+      pickedFile = await picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1080,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        _showSnack(
+          context,
+          _errorMessage(e, 'Não foi possível abrir a galeria/câmera.'),
+        );
+      }
+      return;
+    }
 
     if (pickedFile == null || !context.mounted) return;
 
-    _showPublishDialog(context, ref, File(pickedFile.path));
+    await _showPublishDialog(context, ref, File(pickedFile.path));
   }
 
-  void _showPublishDialog(BuildContext context, WidgetRef ref, File imageFile) {
-    final captionController = TextEditingController();
+  void _showSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
-    showModalBottomSheet(
+  Future<void> _showPublishDialog(
+    BuildContext context,
+    WidgetRef ref,
+    File imageFile,
+  ) async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF141414),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            bool publishing = false;
-
-            Future<void> publish() async {
-              if (publishing) return;
-              setSheetState(() => publishing = true);
-              try {
-                await ref.read(feedControllerProvider.notifier).publishPost(
-                      imageFile: imageFile,
-                      caption: captionController.text.trim(),
-                    );
-                if (context.mounted) {
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Progresso publicado! 🎉')),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  setSheetState(() => publishing = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(_errorMessage(e, 'Erro ao publicar.'))),
-                  );
-                }
-              }
+      builder: (sheetContext) => _PublishSheet(
+        imageFile: imageFile,
+        onPublish: (caption) async {
+          try {
+            await ref.read(feedControllerProvider.notifier).publishPost(
+                  imageFile: imageFile,
+                  caption: caption,
+                );
+            if (context.mounted) {
+              Navigator.pop(sheetContext);
+              _showSnack(context, 'Progresso publicado! 🎉');
             }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                top: 16,
-                left: 16,
-                right: 16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Novo Progresso',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white,
-                        ),
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(
-                      imageFile,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: captionController,
-                    style: const TextStyle(color: Colors.white),
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      hintText: 'Escreva uma legenda para o seu progresso...',
-                      hintStyle: TextStyle(color: Color(0xFF666666), fontSize: 13),
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide(color: Color(0xFF262626)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Color(0xFFFF1E40)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF1E40),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: publishing ? null : publish,
-                    child: publishing
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'PUBLICAR NO FEED',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+          } catch (e) {
+            // A folha mostra o erro e volta a habilitar o botão.
+            if (sheetContext.mounted) {
+              return _errorMessage(e, 'Erro ao publicar.');
+            }
+          }
+          return null;
+        },
+      ),
     );
   }
 
+  /// Abre as opções de origem da foto (câmera ou galeria).
+  ///
+  /// IMPORTANTE: o `builder` da folha recebe um `context` PRÓPRIO (sombreia o
+  /// da tela). Usar esse context depois de `Navigator.pop` fazia a foto ser
+  /// descartada: a folha já tinha sido desmontada quando o picker devolvia o
+  /// arquivo, e o `if (!context.mounted) return;` saía sem abrir nada. Por isso
+  /// o `context` passado para frente é sempre o da TELA.
   void _showImageSourceOptions(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
@@ -173,7 +102,7 @@ class PhotosScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Wrap(
             children: [
@@ -187,7 +116,7 @@ class PhotosScreen extends ConsumerWidget {
                   style: TextStyle(color: Colors.white),
                 ),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(sheetContext);
                   _pickAndPublishPhoto(context, ref, ImageSource.camera);
                 },
               ),
@@ -201,7 +130,7 @@ class PhotosScreen extends ConsumerWidget {
                   style: TextStyle(color: Colors.white),
                 ),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(sheetContext);
                   _pickAndPublishPhoto(context, ref, ImageSource.gallery);
                 },
               ),
@@ -299,12 +228,20 @@ class PhotosScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (posts) => RefreshIndicator(
+        data: (feed) => RefreshIndicator(
           color: const Color(0xFFFF1E40),
           onRefresh: () => ref.read(feedControllerProvider.notifier).refresh(),
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              SliverToBoxAdapter(
+                child: _ScopeSwitcher(
+                  scope: feed.scope,
+                  onChanged: (scope) => ref
+                      .read(feedControllerProvider.notifier)
+                      .setScope(scope),
+                ),
+              ),
               SliverToBoxAdapter(
                 child: GestureDetector(
                   onTap: () => _showImageSourceOptions(context, ref),
@@ -352,13 +289,13 @@ class PhotosScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              if (posts.isEmpty)
+              if (feed.posts.isEmpty)
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 48),
                     child: Text(
                       'Nenhum post por aqui ainda.\n'
-                      'Comece a seguir pessoas e publique seu progresso!',
+                      'Publique seu progresso ou siga alguém!',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Color(0xFF666666)),
                     ),
@@ -367,12 +304,12 @@ class PhotosScreen extends ConsumerWidget {
               else
                 SliverList(
                   delegate: SliverChildBuilderDelegate((context, index) {
-                    final post = posts[index];
+                    final post = feed.posts[index];
                     return _PostCard(
                       key: ValueKey(post.id),
                       postId: post.id,
                     );
-                  }, childCount: posts.length),
+                  }, childCount: feed.posts.length),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 30)),
             ],
@@ -383,10 +320,333 @@ class PhotosScreen extends ConsumerWidget {
   }
 }
 
+/// Seletor de escopo do feed: "Seguindo" (quem você segue + você) ou "Todos".
+///
+/// Antes o feed era sempre o personalizado, então quem não seguia ninguém via
+/// uma tela vazia — mesmo com o app cheio de posts.
+class _ScopeSwitcher extends StatelessWidget {
+  final FeedScope scope;
+  final ValueChanged<FeedScope> onChanged;
+
+  const _ScopeSwitcher({required this.scope, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161616),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF262626)),
+        ),
+        child: Row(
+          children: [
+            _ScopeButton(
+              label: 'Seguindo',
+              icon: Icons.group_rounded,
+              selected: scope == FeedScope.following,
+              onTap: () => onChanged(FeedScope.following),
+            ),
+            _ScopeButton(
+              label: 'Todos',
+              icon: Icons.public_rounded,
+              selected: scope == FeedScope.everyone,
+              onTap: () => onChanged(FeedScope.everyone),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScopeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ScopeButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFFF1E40) : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: selected ? Colors.white : const Color(0xFF888888),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0xFF888888),
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Folha de publicação. É um StatefulWidget de verdade (o `StatefulBuilder`
+/// anterior recriava `publishing = false` a cada rebuild: o spinner nunca
+/// aparecia e toques duplicados disparavam duas publicações).
+class _PublishSheet extends StatefulWidget {
+  final File imageFile;
+
+  /// Publica e devolve a mensagem de erro (ou null em caso de sucesso).
+  final Future<String?> Function(String caption) onPublish;
+
+  const _PublishSheet({required this.imageFile, required this.onPublish});
+
+  @override
+  State<_PublishSheet> createState() => _PublishSheetState();
+}
+
+class _PublishSheetState extends State<_PublishSheet> {
+  final TextEditingController _caption = TextEditingController();
+  bool _publishing = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _caption.dispose();
+    super.dispose();
+  }
+
+  Future<void> _publish() async {
+    if (_publishing) return;
+    setState(() {
+      _publishing = true;
+      _error = null;
+    });
+
+    final error = await widget.onPublish(_caption.text.trim());
+    if (!mounted) return;
+    // null = sucesso (a folha já fechou). Se ela continua aberta (a tela
+    // inteira foi removida, por exemplo), o botão volta a ficar utilizável.
+    setState(() {
+      _publishing = false;
+      _error = error ?? 'Não foi possível concluir a publicação.';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // Padding pela view da folha: o teclado da legenda não pode empurrar
+      // o botão para fora da tela.
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        top: 16,
+        left: 16,
+        right: 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Novo Progresso',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                widget.imageFile,
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _caption,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 2,
+              decoration: const InputDecoration(
+                hintText: 'Escreva uma legenda para o seu progresso...',
+                hintStyle: TextStyle(color: Color(0xFF666666), fontSize: 13),
+                border: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFF262626)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0xFFFF1E40)),
+                ),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Color(0xFFFF1E40),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Color(0xFFFF6B81), fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF1E40),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _publishing ? null : _publish,
+              child: _publishing
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'PUBLICAR NO FEED',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PostCard extends ConsumerWidget {
   final String postId;
 
   const _PostCard({super.key, required this.postId});
+
+  /// Apagar comentário é irreversível e o botão fica ali do lado do texto,
+  /// fácil de apertar sem querer — então perguntamos antes de chamar a API.
+  Future<void> _confirmDeleteComment(
+    BuildContext context,
+    WidgetRef ref,
+    String postId,
+    SocialComment comment,
+  ) async {
+    final text = comment.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final preview = text.length <= 70 ? text : '${text.substring(0, 70)}...';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF141414),
+        title: const Text(
+          'Apagar comentário?',
+          style: TextStyle(color: Colors.white, fontSize: 17),
+        ),
+        content: Text(
+          '"$preview"\n\nNão dá para desfazer.',
+          style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text(
+              'VOLTAR',
+              style: TextStyle(color: Color(0xFF666666)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'APAGAR',
+              style: TextStyle(color: Color(0xFFFF3B5C)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref
+          .read(feedControllerProvider.notifier)
+          .deleteComment(postId, comment.id);
+      if (!context.mounted) return;
+      _showSnack(context, 'Comentário apagado.');
+    } catch (error) {
+      if (!context.mounted) return;
+      // 403 = comentário de outra pessoa; os demais casos são rede/sessão.
+      final denied = error is DioException &&
+          error.response?.statusCode == 403;
+      _showSnack(
+        context,
+        denied
+            ? 'Esse comentário não é seu.'
+            : 'Não foi possível apagar o comentário. Tente de novo.',
+      );
+    }
+  }
+
+  void _showSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
 
   void _showCommentsBottomSheet(BuildContext context, WidgetRef ref) {
     final commentController = TextEditingController();
@@ -435,10 +695,10 @@ class _PostCard extends ConsumerWidget {
               Flexible(
                 child: Consumer(
                   builder: (context, ref, child) {
-                    final comments = _findComments(
-                          ref.watch(feedControllerProvider).value,
-                          postId,
-                        ) ??
+                    final comments = ref
+                            .read(feedControllerProvider.notifier)
+                            .postById(postId)
+                            ?.comments ??
                         const <SocialComment>[];
 
                     if (comments.isEmpty) {
@@ -498,29 +758,18 @@ class _PostCard extends ConsumerWidget {
                           ),
                           trailing: isMine
                               ? IconButton(
+                                  tooltip: 'Apagar comentário',
                                   icon: const Icon(
                                     Icons.delete_outline_rounded,
                                     color: Color(0xFF666666),
                                     size: 18,
                                   ),
-                                  onPressed: () async {
-                                    try {
-                                      await ref
-                                          .read(feedControllerProvider.notifier)
-                                          .deleteComment(postId, comment.id);
-                                    } catch (_) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Não foi possível apagar o comentário.',
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
+                                  onPressed: () => _confirmDeleteComment(
+                                    context,
+                                    ref,
+                                    postId,
+                                    comment,
+                                  ),
                                 )
                               : null,
                         );
@@ -582,10 +831,7 @@ class _PostCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final post = _findPost(
-      ref.watch(feedControllerProvider).value,
-      postId,
-    );
+    final post = ref.read(feedControllerProvider.notifier).postById(postId);
     if (post == null) return const SizedBox.shrink();
 
     return Container(
@@ -746,20 +992,4 @@ String _avatarUrl(String? avatarUrl, String seed) {
   if (url.isNotEmpty) return url;
   final n = seed.hashCode.abs() % 70;
   return 'https://i.pravatar.cc/150?img=$n';
-}
-
-SocialPost? _findPost(List<SocialPost>? posts, String id) {
-  if (posts == null) return null;
-  for (final post in posts) {
-    if (post.id == id) return post;
-  }
-  return null;
-}
-
-List<SocialComment>? _findComments(
-  List<SocialPost>? posts,
-  String postId,
-) {
-  final post = _findPost(posts, postId);
-  return post?.comments;
 }

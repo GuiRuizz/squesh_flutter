@@ -1,41 +1,97 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../auth/presentation/auth_controller.dart';
 import '../data/social_api_service.dart';
 import '../domain/social_models.dart';
 
-/// Estado do feed. build() carrega o feed personalizado assim que o provider
-/// é ouvido (a aba Fotos só existe com sessão ativa, então o token já está lá).
-final feedControllerProvider = AsyncNotifierProvider<FeedController, List<SocialPost>>(
-  FeedController.new,
-);
+/// De onde vêm os posts exibidos no feed.
+enum FeedScope {
+  /// Só quem o usuário segue (mais os próprios posts) — GET /posts/feed.
+  following,
 
-class FeedController extends AsyncNotifier<List<SocialPost>> {
+  /// Todos os posts públicos — GET /posts.
+  everyone,
+}
+
+/// Estado do feed: os posts já carregados + de onde vieram.
+class FeedState {
+  final List<SocialPost> posts;
+  final FeedScope scope;
+
+  const FeedState({required this.posts, required this.scope});
+}
+
+final feedControllerProvider =
+    AsyncNotifierProvider<FeedController, FeedState>(FeedController.new);
+
+class FeedController extends AsyncNotifier<FeedState> {
+  /// Escopo que o usuário escolheu na tela (null = ainda não escolheu).
+  FeedScope? _scope;
+
   @override
-  Future<List<SocialPost>> build() async {
-    return await ref.watch(socialApiServiceProvider).getFeed();
+  Future<FeedState> build() async {
+    _scope = null;
+    return _load(FeedScope.following);
+  }
+
+  /// Troca o escopo do feed (Seguindo / Todos).
+  Future<void> setScope(FeedScope scope) async {
+    if (state.value?.scope == scope) return;
+    _scope = scope;
+    state = await AsyncValue.guard(() => _load(scope));
+  }
+
+  Future<FeedState> _load(FeedScope scope) async {
+    final service = ref.read(socialApiServiceProvider);
+    final posts = scope == FeedScope.following
+        ? await service.getFeed()
+        : await service.getPublicFeed();
+
+    // Feed "Seguindo" vazio (não segue ninguém e não tem posts ainda) não pode
+    // deixar a tela morta: mostra o feed público e avisa que está em "Todos".
+    if (posts.isEmpty && scope == FeedScope.following) {
+      return FeedState(posts: await service.getPublicFeed(), scope: FeedScope.everyone);
+    }
+
+    return FeedState(posts: posts, scope: scope);
+  }
+
+  List<SocialPost> get _posts => state.value?.posts ?? const [];
+
+  /// Post pelo id (usado pelos cards, que são stateless).
+  SocialPost? postById(String id) {
+    for (final post in _posts) {
+      if (post.id == id) return post;
+    }
+    return null;
   }
 
   /// Like/deslike otimista: atualiza a UI na hora e reverte se a API falhar.
   Future<void> toggleLike(String postId) async {
-    final posts = state.value ?? [];
-    final index = posts.indexWhere((p) => p.id == postId);
+    final current = state.value;
+    if (current == null) return;
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
     if (index < 0) return;
 
-    final post = posts[index];
+    final post = current.posts[index];
     final willLike = !post.likedByMe;
 
-    state = AsyncData([
-      for (var i = 0; i < posts.length; i++)
-        if (i == index)
-          post.copyWith(
-            likedByMe: willLike,
-            likesCount: post.likesCount + (willLike ? 1 : -1),
-          )
-        else
-          posts[i],
-    ]);
+    state = AsyncData(
+      FeedState(
+        posts: [
+          for (var i = 0; i < current.posts.length; i++)
+            if (i == index)
+              post.copyWith(
+                likedByMe: willLike,
+                likesCount: post.likesCount + (willLike ? 1 : -1),
+              )
+            else
+              current.posts[i],
+        ],
+        scope: current.scope,
+      ),
+    );
 
     try {
       final service = ref.read(socialApiServiceProvider);
@@ -45,7 +101,7 @@ class FeedController extends AsyncNotifier<List<SocialPost>> {
         await service.unlikePost(postId);
       }
     } catch (_) {
-      state = AsyncData(posts); // reverte
+      state = AsyncData(current); // reverte
       rethrow;
     }
   }
@@ -53,25 +109,20 @@ class FeedController extends AsyncNotifier<List<SocialPost>> {
   Future<void> addComment(String postId, String text) async {
     final comment =
         await ref.read(socialApiServiceProvider).addComment(postId, text);
-    final posts = state.value ?? [];
-    state = AsyncData([
-      for (final p in posts)
-        if (p.id == postId) p.copyWith(comments: [...p.comments, comment]) else p,
-    ]);
+    _replacePost(
+      postId,
+      (p) => p.copyWith(comments: [...p.comments, comment]),
+    );
   }
 
   Future<void> deleteComment(String postId, String commentId) async {
     await ref.read(socialApiServiceProvider).deleteComment(postId, commentId);
-    final posts = state.value ?? [];
-    state = AsyncData([
-      for (final p in posts)
-        if (p.id == postId)
-          p.copyWith(
-            comments: p.comments.where((c) => c.id != commentId).toList(),
-          )
-        else
-          p,
-    ]);
+    _replacePost(
+      postId,
+      (p) => p.copyWith(
+        comments: p.comments.where((c) => c.id != commentId).toList(),
+      ),
+    );
   }
 
   /// Publica uma foto: presign -> PUT binário na URL assinada -> POST /posts.
@@ -84,6 +135,7 @@ class FeedController extends AsyncNotifier<List<SocialPost>> {
     final filename = imageFile.path.split(RegExp(r'[\\/]')).last;
     final contentType = _contentTypeFor(filename);
 
+    // O autor vem do token no backend, então o app não manda user_id.
     final presign = await service.presignUpload(
       filename: filename,
       contentType: contentType,
@@ -94,26 +146,42 @@ class FeedController extends AsyncNotifier<List<SocialPost>> {
       contentType: contentType,
     );
 
-    final me = await ref.read(authControllerProvider.future);
     final post = await service.createPost(
-      userId: me!.id,
       imageUrl: presign.imageUrl,
       caption: caption,
     );
 
     // Insere o post novo no topo do feed sem refazer o fetch inteiro.
-    state = AsyncData([post, ...?state.value]);
+    final current = state.value;
+    if (current != null) {
+      state = AsyncData(
+        FeedState(posts: [post, ...current.posts], scope: current.scope),
+      );
+    } else {
+      await refresh();
+    }
     return post;
   }
 
   /// Recarrega o feed do servidor (pull-to-refresh).
   Future<void> refresh() async {
-    try {
-      final posts = await ref.read(socialApiServiceProvider).getFeed();
-      state = AsyncData(posts);
-    } catch (e, st) {
-      state = AsyncError(e, st);
-    }
+    final scope = _scope ?? state.value?.scope ?? FeedScope.following;
+    _scope = scope;
+    state = await AsyncValue.guard(() => _load(scope));
+  }
+
+  void _replacePost(String postId, SocialPost Function(SocialPost) change) {
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      FeedState(
+        posts: [
+          for (final p in current.posts)
+            if (p.id == postId) change(p) else p,
+        ],
+        scope: current.scope,
+      ),
+    );
   }
 
   String _contentTypeFor(String filename) {

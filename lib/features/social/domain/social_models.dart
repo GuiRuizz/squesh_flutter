@@ -92,6 +92,7 @@ class SocialPost {
       );
 
   SocialPost copyWith({
+    String? caption,
     int? likesCount,
     bool? likedByMe,
     List<SocialComment>? comments,
@@ -101,7 +102,7 @@ class SocialPost {
       userId: userId,
       user: user,
       imageUrl: imageUrl,
-      caption: caption,
+      caption: caption ?? this.caption,
       createdAt: createdAt,
       likesCount: likesCount ?? this.likesCount,
       likedByMe: likedByMe ?? this.likedByMe,

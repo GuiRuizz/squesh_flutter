@@ -61,14 +61,35 @@ class SocialApiService {
     await _dio.delete('${ApiEndpoints.postComments(postId)}/$commentId');
   }
 
+  /// PUT /posts/:id — o backend só aceita mexer na legenda.
+  Future<void> updatePostCaption(String postId, String caption) async {
+    await _dio.put(
+      ApiEndpoints.updatePost(postId),
+      data: {'caption': caption},
+    );
+  }
+
+  /// DELETE /posts/:id — só o dono apaga (o Go devolve 403 para os demais).
+  Future<void> deletePost(String postId) async {
+    await _dio.delete(ApiEndpoints.deletePost(postId));
+  }
+
   /// POST /uploads/presign -> { upload_url, image_url, key }
+  ///
+  /// [folder] separa foto de post ("posts", o padrão) de foto de perfil
+  /// ("avatars"). O backend só aceita esses dois valores.
   Future<PresignResult> presignUpload({
     required String filename,
     required String contentType,
+    String folder = 'posts',
   }) async {
     final response = await _dio.post(
       ApiEndpoints.uploadsPresign,
-      data: {'filename': filename, 'content_type': contentType},
+      data: {
+        'filename': filename,
+        'content_type': contentType,
+        'folder': folder,
+      },
     );
     final data = Map<String, dynamic>.from(response.data as Map);
     return PresignResult(
@@ -96,14 +117,14 @@ class SocialApiService {
   }
 
   /// POST /posts — cria o post com a URL pública retornada pelo presign.
+  /// O autor vem do token: não mandamos user_id.
   Future<SocialPost> createPost({
-    required String userId,
     required String imageUrl,
     required String caption,
   }) async {
     final response = await _dio.post(
       ApiEndpoints.posts,
-      data: {'user_id': userId, 'image_url': imageUrl, 'caption': caption},
+      data: {'image_url': imageUrl, 'caption': caption},
     );
     return SocialPost.fromJson(
       Map<String, dynamic>.from(response.data as Map),
