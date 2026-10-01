@@ -23,6 +23,14 @@ class AppTheme {
           side: const BorderSide(color: Color(0xFF2A2A2A)),
         ),
       ),
+      // Rede de segurança para qualquer SnackBar que sobre sem passar por
+      // `showAppSnack`: pelo menos já sai flutuante. O visual "liquid neon"
+      // completo está em lib/core/widgets/app_snackbar.dart.
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
     );
   }
 }

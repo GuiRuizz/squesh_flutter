@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:squesh_flutter/features/notification/domain/notifications_controller.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/app_snackbar.dart';
 import '../domain/notification_model.dart';
 
 class NotificationScreen extends ConsumerWidget {
@@ -56,14 +57,10 @@ class NotificationScreen extends ConsumerWidget {
                   ),
                   onPressed: () {
                     ref.read(notificationProvider.notifier).markAllAsRead();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF222222),
-                        content: Text(
-                          'Todas as notificações foram lidas!',
-                          style: TextStyle(color: AppTheme.textMain),
-                        ),
-                      ),
+                    showAppSnack(
+                      context,
+                      'Todas as notificações foram lidas!',
+                      style: AppSnackStyle.success,
                     );
                   },
                 ),

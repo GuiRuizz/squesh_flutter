@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/widgets/app_snackbar.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/social_models.dart';
 import 'feed_controller.dart';
@@ -47,9 +48,7 @@ class PhotosScreen extends ConsumerWidget {
   }
 
   void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    showAppSnack(context, message);
   }
 
   Future<void> _showPublishDialog(
@@ -638,14 +637,7 @@ class _PostCard extends ConsumerWidget {
   }
 
   void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    showAppSnack(context, message);
   }
 
   void _showCommentsBottomSheet(BuildContext context, WidgetRef ref) {
@@ -810,11 +802,7 @@ class _PostCard extends ConsumerWidget {
                             .addComment(postId, text);
                       } catch (_) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Não foi possível comentar.'),
-                            ),
-                          );
+                          showAppSnack(context, 'Não foi possível comentar.');
                         }
                       }
                     },
@@ -926,11 +914,7 @@ class _PostCard extends ConsumerWidget {
                           .toggleLike(post.id);
                     } catch (_) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Não foi possível curtir.'),
-                          ),
-                        );
+                        showAppSnack(context, 'Não foi possível curtir.');
                       }
                     }
                   },

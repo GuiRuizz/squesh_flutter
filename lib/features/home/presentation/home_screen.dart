@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:squesh_flutter/widgets/home_header_widget.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../core/widgets/app_snackbar.dart';
 import '../../../widgets/path_connector_painter.dart';
 import '../../../widgets/path_node_widget.dart';
 import '../../../widgets/trail_detail_modal.dart';
@@ -25,12 +26,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppTheme.crimsonRed,
-        content: Text(message),
-      ),
-    );
+    showAppSnack(context, message);
   }
 
   /// Abre o modal de detalhe de uma ETAPA da trilha: uma SESSÃO de treino

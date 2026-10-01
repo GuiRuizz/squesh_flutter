@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import '../../../core/widgets/app_snackbar.dart';
 
 /// Paleta e estilos reaproveitados pelas telas de Configurações.
 /// Antes cada tela repetia os mesmos literais; agora ficam num lugar só.
@@ -388,23 +389,19 @@ const BorderRadius settingsSheetRadius = BorderRadius.vertical(
   top: Radius.circular(20),
 );
 
-/// Mostra um SnackBar no tema escuro.
+/// Mostra o aviso flutuante padrão do App (mesmo balão "liquid neon" das
+/// demais telas). Fica aqui só para as Configurações manterem a chamada
+/// antiga; `error: false` vira o tom neutro, `error: true` o vermelho de erro.
 void showSettingsSnack(
   BuildContext context,
   String message, {
   bool error = false,
 }) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error
-            ? const Color(0xFF7A1024)
-            : SettingsColors.surfaceAlt,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  showAppSnack(
+    context,
+    message,
+    style: error ? AppSnackStyle.error : AppSnackStyle.info,
+  );
 }
 
 /// Texto de erro legível para o usuário.
